@@ -8,7 +8,7 @@ from discord_notifier import periodic_discord_pings
 from stream_checker import periodic_stream_checks
 
 AUTH_TOKEN = os.environ.get("KICK_AUTH_TOKEN")
-CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "streameruniversitario")
+CHANNEL_NAME = "streameruniversitario"
 WS_URI = "wss://chat.kick.com"
 
 def get_channel_id(channel_name):
