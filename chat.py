@@ -1,66 +1,47 @@
+import os
+import json
 import asyncio
 import websockets
-import json
-import time
-import os
 import cloudscraper
-from discord_notifier import periodic_discord_pings
-from stream_checker import periodic_stream_checks
+from discord_webhook import DiscordWebhook
 
-AUTH_TOKEN = os.environ.get("KICK_AUTH_TOKEN")
-CHANNEL_NAME = "Streameruniversitario"
-WS_URI = "wss://chat.kick.com"
+# Usa cloudscraper para evitar bloqueos de Cloudflare
+scraper = cloudscraper.create_scraper()
+
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+KICK_AUTH_TOKEN = os.environ.get("KICK_AUTH_TOKEN")
+STREAMER_NAME = "streameruniversitario"
 
 def get_channel_id(channel_name):
-    scraper = cloudscraper.create_scraper()
     url = f"https://kick.com/api/v2/channels/{channel_name}"
     response = scraper.get(url)
-    if response.status_code == 200:
-        return response.json()["id"]
-    else:
+
+    if response.status_code != 200:
         raise Exception("No se pudo obtener el ID del canal (Cloudflare)")
 
+    data = response.json()
+    return data.get("id")
+
 async def connect_to_chat():
-    channel_id = get_channel_id(CHANNEL_NAME)
-    async with websockets.connect(WS_URI) as ws:
-        join_msg = {
-            "event": "phx_join",
-            "topic": f"chatrooms:{channel_id}",
-            "payload": {"token": AUTH_TOKEN},
-            "ref": "1"
-        }
-        await ws.send(json.dumps(join_msg))
-        print(f"Conectado al chat de '{CHANNEL_NAME}'")
+    channel_id = get_channel_id(STREAMER_NAME)
+    uri = f"wss://chat.kick.com/socket.io/?EIO=4&transport=websocket"
+    
+    async with websockets.connect(uri) as websocket:
+        await websocket.send('40')
 
-        async def listener():
-            while True:
-                raw_msg = await ws.recv()
-                try:
-                    data = json.loads(raw_msg)
-                    if data.get("event") == "message.new":
-                        msg = data["payload"]["message"]
-                        user = msg["sender"]["username"]
-                        text = msg["content"]
-                        print(f"{user}: {text}")
-                except Exception as e:
-                    print("Error leyendo mensaje:", e)
+        await asyncio.sleep(1)
+        await websocket.send(f'42["join_channel",{{"channel_id":{channel_id}}}]')
 
-        async def send_message_loop():
-            while True:
-                msg = input("Escribe tu mensaje (o 'salir'): ")
-                if msg.lower() == "salir":
-                    break
-                send_payload = {
-                    "event": "message.send",
-                    "topic": f"chatrooms:{channel_id}",
-                    "payload": {"content": msg},
-                    "ref": str(int(time.time()))
-                }
-                await ws.send(json.dumps(send_payload))
+        send_discord_message("Bot conectado al chat de Kick")
 
-        await asyncio.gather(
-            listener(),
-            send_message_loop(),
-            periodic_discord_pings(),
-            periodic_stream_checks()
-        )
+        while True:
+            message = await websocket.recv()
+            if "user joined" in message:
+                print(f"[JOIN] {message}")
+            elif "message" in message:
+                print(f"[MSG] {message}")
+
+def send_discord_message(content):
+    if DISCORD_WEBHOOK_URL:
+        webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=content)
+        webhook.execute()
