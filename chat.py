@@ -3,21 +3,22 @@ import websockets
 import json
 import time
 import os
-import requests
+import cloudscrapper
 from discord_notifier import periodic_discord_pings
 from stream_checker import periodic_stream_checks
 
 AUTH_TOKEN = os.environ.get("KICK_AUTH_TOKEN")
-CHANNEL_NAME = "streameruniversitario"
+CHANNEL_NAME = "Streameruniversitario"
 WS_URI = "wss://chat.kick.com"
 
 def get_channel_id(channel_name):
-    url = f"https://kick.com/api/v1/channels/{channel_name}"
-    response = requests.get(url)
+    scraper = cloudscraper.create_scraper()
+    url = f"https://kick.com/api/v2/channels/{channel_name}"
+    response = scraper.get(url)
     if response.status_code == 200:
         return response.json()["id"]
     else:
-        raise Exception("No se pudo obtener el ID del canal")
+        raise Exception("No se pudo obtener el ID del canal (Cloudflare)")
 
 async def connect_to_chat():
     channel_id = get_channel_id(CHANNEL_NAME)
