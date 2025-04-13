@@ -1,13 +1,10 @@
 import requests
-import json
+import os
 import asyncio
 
-with open("config.json") as f:
-    config = json.load(f)
-
-DISCORD_WEBHOOK_URL = config["discord_webhook_url"]
-AVATAR_URL = config.get("avatar_url", "")
-CHANNEL_NAME = config["channel_name"]
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+AVATAR_URL = os.environ.get("AVATAR_URL", "")
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "streameruniversitario")
 
 last_stream_status = None
 
