@@ -3,7 +3,7 @@ import websockets
 import json
 import time
 import os
-import cloudscrapper
+import cloudscraper
 from discord_notifier import periodic_discord_pings
 from stream_checker import periodic_stream_checks
 
