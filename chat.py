@@ -12,7 +12,7 @@ CHANNEL_NAME = "streameruniversitario"
 WS_URI = "wss://chat.kick.com"
 
 def get_channel_id(channel_name):
-    url = f"https://kick.com/api/v1/channels/{CHANNEL_NAME}"
+    url = f"https://kick.com/api/v1/channels/{channel_name}"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json()["id"]
