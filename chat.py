@@ -2,14 +2,13 @@ import asyncio
 import websockets
 import json
 import time
+import os
 import requests
 from discord_notifier import periodic_discord_pings
 from stream_checker import periodic_stream_checks
 
-with open("config.json") as f:
-    config = json.load(f)
-
-AUTH_TOKEN = config["auth_token"]
+AUTH_TOKEN = os.environ.get("KICK_AUTH_TOKEN")
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "streameruniversitario")
 WS_URI = "wss://chat.kick.com"
 
 def get_channel_id(channel_name):
@@ -20,8 +19,8 @@ def get_channel_id(channel_name):
     else:
         raise Exception("No se pudo obtener el ID del canal")
 
-async def connect_to_chat(channel_name):
-    channel_id = get_channel_id(channel_name)
+async def connect_to_chat():
+    channel_id = get_channel_id(CHANNEL_NAME)
     async with websockets.connect(WS_URI) as ws:
         join_msg = {
             "event": "phx_join",
@@ -30,7 +29,7 @@ async def connect_to_chat(channel_name):
             "ref": "1"
         }
         await ws.send(json.dumps(join_msg))
-        print(f"Conectado al chat de '{channel_name}'")
+        print(f"Conectado al chat de '{CHANNEL_NAME}'")
 
         async def listener():
             while True:
