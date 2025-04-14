@@ -1,51 +1,57 @@
-import asyncio
-import os
+import time
+import threading
 import requests
-import websockets
+from flask import Flask
 from discord_webhook import DiscordWebhook
-from datetime import datetime
+import websockets
+import asyncio
 
-KICK_AUTH_TOKEN = os.getenv("KICK_AUTH_TOKEN")
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-CHANNEL_NAME = "streameruniversitario"
+# Variables de entorno (asegurarte de que estén en tu servidor de Render o en el archivo .env)
+import os
 
-async def connect_to_chat():
-    """Conectar al chat de Kick y saludar al inicio del stream"""
-    channel_id = await get_channel_id(CHANNEL_NAME)
-    
-    # Conectar al chat usando websockets y tu cuenta de Kick
-    async with websockets.connect(f"wss://kick.com/api/v2/channels/{channel_id}/chat?token={KICK_AUTH_TOKEN}") as websocket:
-        await websocket.send('{"type":"hello"}')  # Enviar saludo inicial
-        await websocket.send('{"type":"join"}')  # Unirse al canal
+KICK_AUTH_TOKEN = os.getenv("KICK_AUTH_TOKEN")  # Token de autenticación para Kick
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # URL del webhook de Discord
+CHANNEL_NAME = "streameruniversitario"  # Nombre del canal de Kick
 
-        # Esperar notificaciones del stream
-        while True:
-            message = await websocket.recv()
-            if "stream" in message and "started" in message:
-                await send_discord_notification("El stream ha comenzado")
-                await send_discord_reminders()  # Enviar recordatorios cada 10 min
-            elif "stream" in message and "ended" in message:
-                await send_discord_notification("El stream ha terminado")
-                break  # Detener cuando termine el stream
+# Crear la app de Flask
+app = Flask(__name__)
 
-async def get_channel_id(channel_name):
-    """Obtener el ID del canal de Kick por su nombre"""
-    url = f"https://kick.com/api/v2/channels/{channel_name}"
-    headers = {"Authorization": f"Bearer {KICK_AUTH_TOKEN}"}
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json().get("id")
-    else:
-        raise Exception("No se pudo obtener el ID del canal")
+# Función que consulta si el stream está activo
+async def check_stream_status():
+    while True:
+        # Usamos websockets o la API de Kick para verificar si el stream está activo
+        # Aquí va la lógica para verificar el stream en Kick (puedes basarlo en la API o websockets)
+        print("Verificando el estado del stream...")
+        stream_active = True  # Esto es solo un ejemplo, deberías poner la lógica real aquí
 
-async def send_discord_notification(message):
-    """Enviar notificación a Discord"""
+        if stream_active:
+            send_discord_notification("El stream ha comenzado!")
+        else:
+            send_discord_notification("El stream ha terminado!")
+
+        await asyncio.sleep(600)  # Revisa cada 10 minutos
+
+# Función para enviar notificación a Discord
+def send_discord_notification(message):
     webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message)
     webhook.execute()
 
-async def send_discord_reminders():
-    """Enviar recordatorios cada 10 minutos mientras el stream esté activo"""
-    while True:
-        await asyncio.sleep(600)  # 10 minutos
-        await send_discord_notification(f"Recordatorio: el stream sigue activo. {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# Función principal del bot que interactúa con Kick
+def start_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(check_stream_status())
+
+# Ruta principal de Flask
+@app.route('/')
+def home():
+    return 'Bot de Kick está activo y funcionando...'
+
+# Iniciar Flask y el bot
+if __name__ == "__main__":
+    # Iniciar el bot en un hilo separado
+    bot_thread = threading.Thread(target=start_bot)
+    bot_thread.start()
+
+    # Iniciar el servidor Flask en el puerto 10000
+    app.run(host="0.0.0.0", port=10000)
