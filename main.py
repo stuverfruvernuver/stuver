@@ -1,85 +1,83 @@
-import requests
+import os
 import time
-import json
 import asyncio
 import websockets
+import requests
+from discord_webhook import DiscordWebhook
 from flask import Flask
 from threading import Thread
-from discord_webhook import DiscordWebhook
+
+KICK_SESSION_TOKEN = os.getenv("KICK_SESSION_TOKEN")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+CHANNEL_NAME = "streameruniversitario"
+API_BASE = "https://kick.com/api/v2/channels/"
 
 app = Flask(__name__)
+start_time = None
+is_live = False
 
-# Configuración
-KICK_AUTH_TOKEN = "tu_token_aqui"
-DISCORD_WEBHOOK_URL = "tu_discord_webhook_aqui"
-CHANNEL_NAME = "Streameruniversitario"
-BASE_URL = "https://kick.com/api/v2"
-HEADERS = {
-    "Authorization": f"Bearer {KICK_AUTH_TOKEN}",
-    "User-Agent": "Mozilla/5.0"
-}
-
-# Tiempo de inicio del bot
-start_time = time.time()
-
-# Función para obtener el ID del canal
-async def get_channel_id():
-    url = f"{BASE_URL}/channels/{CHANNEL_NAME}"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        return response.json()["data"]["id"]
-    else:
-        raise Exception("No se pudo obtener el ID del canal")
-
-# Función para enviar mensaje a Discord
-def send_discord_notification(message):
-    webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message)
+def send_discord_message(content):
+    webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=content)
     webhook.execute()
 
-# Función principal para conectarse al chat
-async def connect_to_chat():
-    channel_id = await get_channel_id()
-    uri = f"wss://kick.com/api/v2/stream/{channel_id}/chat"
+def get_channel_id(channel_name):
+    res = requests.get(API_BASE + channel_name)
+    if res.status_code == 200:
+        return res.json()["id"]
+    return None
 
-    async with websockets.connect(uri) as websocket:
-        # Unirse al chat y enviar "Hola!"
-        await websocket.send(json.dumps({"op": 1, "d": {"type": "hello"}}))
-        await websocket.send(json.dumps({"op": 1, "d": {"type": "join", "room": CHANNEL_NAME}}))
-        await websocket.send(json.dumps({"op": 4, "d": {"type": "chat", "message": "Hola!"}}))
-        print("Mensaje 'Hola!' enviado al chat.")
-        send_discord_notification("El stream ha comenzado. Bot activo.")
+def is_stream_live(channel_name):
+    res = requests.get(API_BASE + channel_name)
+    if res.status_code == 200:
+        return res.json()["livestream"] is not None
+    return False
 
-        # Repetir cada 10 minutos
+async def connect_to_chat(channel_id):
+    url = f"wss://chat.kick.com/{channel_id}"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Origin": "https://kick.com",
+        "Cookie": f"__Secure-next-auth.session-token={KICK_SESSION_TOKEN}"
+    }
+    async with websockets.connect(url, extra_headers=headers) as ws:
+        await ws.send('{"event":"join","data":{"room":"channel_{}"}}'.format(channel_id))
+        await ws.send('{"event":"message","data":{"content":":Bwop:"}}')  # Saludo inicial
+
         while True:
-            await websocket.send(json.dumps({
-                "op": 4,
-                "d": {
-                    "type": "chat",
-                    "message": ":Bwop:"
-                }
-            }))
-            # Calcular el tiempo en minutos
-            elapsed = int((time.time() - start_time) // 60)
-            send_discord_notification(f":clock10: El bot lleva activo {elapsed} minuto(s).")
-            print(f"Enviado mensaje :Bwop: al chat y notificación a Discord ({elapsed} min)")
-            await asyncio.sleep(600)
+            await asyncio.sleep(600)  # Cada 10 minutos
+            await ws.send('{"event":"message","data":{"content":":Bwop:"}}')
 
-# Ejecutar el bot en hilo separado
-def start_bot():
-    asyncio.run(main_bot())
+def format_uptime(seconds):
+    mins, secs = divmod(int(seconds), 60)
+    hours, mins = divmod(mins, 60)
+    return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-async def main_bot():
-    await connect_to_chat()
+def monitor_stream():
+    global start_time, is_live
+    channel_id = get_channel_id(CHANNEL_NAME)
+    if not channel_id:
+        print("Error: No se pudo obtener el ID del canal.")
+        return
+
+    while True:
+        live = is_stream_live(CHANNEL_NAME)
+        if live and not is_live:
+            is_live = True
+            start_time = time.time()
+            send_discord_message("¡El stream ha comenzado!")
+            asyncio.run(connect_to_chat(channel_id))
+        elif not live and is_live:
+            is_live = False
+            send_discord_message("El stream ha terminado.")
+        elif is_live:
+            uptime = time.time() - start_time
+            send_discord_message(f"Stream activo: {format_uptime(uptime)}")
+        time.sleep(600)  # Verifica cada 10 minutos
 
 @app.route('/')
 def home():
-    return "El bot está activo."
+    return "Kick bot está corriendo."
 
-@app.route('/start_bot')
-def start():
-    thread = Thread(target=start_bot)
-    thread.start()
-    return "Bot iniciado."
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+if __name__ == '__main__':
+    Thread(target=monitor_stream).start()
+    app.run(host="0.0.0.0", port=10000)
