@@ -22,12 +22,15 @@ headers = {
 
 def notify_discord(message):
     try:
-        webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message)
+        webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message,
+        username = "Bwop!", 
+        avatar_url = "https://preview.redd.it/60ti7xezkdix.jpg?width=640&crop=smart&auto=webp&s=d32d884e61930070549b00d96c5607209c3f8002" )
         response = webhook.execute()
         if not response.ok:
             print("[LOG] Falló el envío a Discord:", response.status_code, response.text)
     except Exception as e:
         print("[LOG] Error al enviar al webhook de Discord:", str(e))
+        from discord_webhook import DiscordWebhook
 
 
 def get_authenticated_username():
