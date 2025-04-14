@@ -1,76 +1,114 @@
-import asyncio
-import requests
-import websockets
-import time
 import os
+import time
+import requests
+import asyncio
+import json
+from flask import Flask, redirect
 from discord_webhook import DiscordWebhook
+import websockets
+from urllib.parse import urlencode
+from requests.auth import HTTPBasicAuth
 
-# Variables de entorno (se obtienen de un archivo `.env` o las defines directamente)
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-KICK_USERNAME = os.getenv("KICK_USERNAME")  # Tu nombre de usuario de Kick
-KICK_PASSWORD = os.getenv("KICK_PASSWORD")  # Tu contraseña de Kick
+# Configuración
+app = Flask(__name__)
+CLIENT_ID = '01JRTHNAP1AE4S75524PEXN0DN'  # Reemplazar con tu client_id
+CLIENT_SECRET = '0061627a12559ca2025a8e2202d9a4cbb89b3fed26c816c9869432a552d44f10'  # Reemplazar con tu client_secret
+REDIRECT_URI = 'http://localhost:5000/callback'  # Reemplazar con tu redirect URI
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # URL del webhook de Discord
 CHANNEL_NAME = "Streameruniversitario"
-
-# Configuración de WebSocket
 start_time = time.time()
 
-# Función para obtener el token (inspirado en kick-js)
-def authenticate_kick(username, password):
-    # En `kick-js`, se realiza una autenticación básica con username y password.
-    # Aquí usaremos una simulación (deberías reemplazarlo con la API correcta o flujo OAuth)
-    
-    auth_url = "https://kick.com/api/v1/authenticate"  # Endpoint hipotético
-    payload = {"username": username, "password": password}
-    
-    response = requests.post(auth_url, json=payload)
-    
-    if response.status_code == 200:
-        data = response.json()
-        return data['token']  # Suponiendo que la API devuelve un 'token' en JSON
-    else:
-        print("[LOG] Error de autenticación:", response.text)
-        return None
+# Headers comunes para las peticiones HTTP
+headers = {
+    "user-agent": "Mozilla/5.0"
+}
 
-# Función para notificar a Discord
 def notify_discord(message):
     try:
         webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message,
-        username="Bwop!",
-        avatar_url="https://preview.redd.it/60ti7xezkdix.jpg?width=640&crop=smart&auto=webp&s=d32d884e61930070549b00d96c5607209c3f8002")
+                                 username="Bwop!", 
+                                 avatar_url="https://preview.redd.it/60ti7xezkdix.jpg?width=640&crop=smart&auto=webp&s=d32d884e61930070549b00d96c5607209c3f8002")
         response = webhook.execute()
         if not response.ok:
             print("[LOG] Falló el envío a Discord:", response.status_code, response.text)
     except Exception as e:
         print("[LOG] Error al enviar al webhook de Discord:", str(e))
 
-# Función para obtener el nombre de usuario autenticado
-def get_authenticated_username(token):
-    # Supongamos que la API de Kick tiene un endpoint para obtener el usuario autenticado
-    user_url = "https://kick.com/api/v1/user"
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(user_url, headers=headers)
+# Endpoint para iniciar el proceso de OAuth
+@app.route('/login')
+def login():
+    authorization_url = f'https://kick.com/oauth/authorize?{urlencode({"client_id": CLIENT_ID, "redirect_uri": REDIRECT_URI, "response_type": "code", "scope": "chat:read chat:write"})}'
+    return redirect(authorization_url)
+
+# Endpoint para manejar la redirección después de la autenticación de OAuth
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    if not code:
+        return "Error: No se obtuvo el código de autorización", 400
+
+    # Intercambiar el código por el token de acceso
+    token_url = 'https://kick.com/oauth/token'
+    data = {
+        'code': code,
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'redirect_uri': REDIRECT_URI,
+        'grant_type': 'authorization_code'
+    }
+    response = requests.post(token_url, data=data, auth=HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET))
     
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("username")
+    if response.ok:
+        token_data = response.json()
+        access_token = token_data.get('access_token')
+        if access_token:
+            # Guardar el access token para su uso en futuras solicitudes
+            os.environ['ACCESS_TOKEN'] = access_token
+            notify_discord("Bot conectado exitosamente a Kick.")
+            return "Autenticación exitosa. El bot está listo para interactuar con el chat."
+        else:
+            return "Error: No se obtuvo el token de acceso.", 400
     else:
-        print("[LOG] No se pudo obtener el nombre de usuario")
+        return f"Error al obtener el token: {response.status_code}", 400
+
+def get_authenticated_username():
+    access_token = os.getenv('ACCESS_TOKEN')
+    if not access_token:
         return "Desconocido"
 
-# Función para conectarse al chat usando WebSocket
-async def connect_to_chat(token):
     try:
-        url = f"wss://chat.kick.com/socket.io/?channel={CHANNEL_NAME}&EIO=4&transport=websocket"
+        headers["Authorization"] = f"Bearer {access_token}"
+        response = requests.get("https://kick.com/api/v1/user", headers=headers)
+        if response.ok:
+            data = response.json()
+            return data.get("username", "Desconocido")
+        else:
+            print("[LOG] No se pudo obtener el nombre de usuario de Kick")
+            return "Desconocido"
+    except Exception as e:
+        print("[LOG] Error al obtener el usuario Kick:", str(e))
+        return "Desconocido"
+
+async def connect_to_chat():
+    access_token = os.getenv('ACCESS_TOKEN')
+    if not access_token:
+        print("[LOG] No se pudo obtener el token de acceso.")
+        return
+
+    username = get_authenticated_username()
+    print(f"[LOG] Conectado como {username} en el canal {CHANNEL_NAME}")
+    
+    try:
+        url = f"wss://websockets.kick.com/viewer/v1/connect?token={access_token}"
         async with websockets.connect(url) as ws:
             print(f"[LOG] Conectado al chat de {CHANNEL_NAME}")
-            await ws.send("40")  # protocolo de conexión con socket.io
+            await ws.send("40")  # Protocolo de conexión con socket.io
             await ws.send(f'42["join", {{"channel": "{CHANNEL_NAME}"}}]')
-
-            await ws.send('42["message", {"content": "¡Hola! Stream comenzado."}]')  # mensaje al empezar stream
+            await ws.send('42["message", {"content": "Hola!"}]')  # Enviar saludo al iniciar stream
 
             while True:
                 elapsed = int(time.time() - start_time)
-                if elapsed % 600 < 5:  # cada 10 minutos
+                if elapsed % 600 < 5:  # Cada 10 minutos
                     try:
                         await ws.send('42["message", {"content": ":Bwop:"}]')
                         notify_discord(f"El bot sigue en línea después de {elapsed // 60} minutos.")
@@ -81,20 +119,14 @@ async def connect_to_chat(token):
     except Exception as e:
         print("[LOG] Error en la conexión al chat:", e)
 
-# Función principal del bot
-def run_bot():
-    token = authenticate_kick(KICK_USERNAME, KICK_PASSWORD)
-    if not token:
-        print("[LOG] No se pudo autenticar. El bot no puede continuar.")
-        return
-    
-    username = get_authenticated_username(token)
-    notify_discord(f"Bot conectado como **{username}** al canal **{CHANNEL_NAME}**.")
-    
-    # Ejecutar el WebSocket en un bucle asincrónico
-    loop = asyncio.get_event_loop()
-    loop.create_task(connect_to_chat(token))
-    loop.run_forever()
+@app.route('/')
+def index():
+    return "Bot de Kick activo."
 
 if __name__ == '__main__':
-    run_bot()
+    username = get_authenticated_username()
+    if username != "Desconocido":
+        notify_discord(f"Bot conectado como **{username}** al canal **{CHANNEL_NAME}**.")
+    loop = asyncio.get_event_loop()
+    loop.create_task(connect_to_chat())
+    app.run(host="0.0.0.0", port=5000)
