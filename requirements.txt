@@ -1,3 +1,4 @@
-websockets==12.0
+flask==2.2.2
 requests==2.31.0
-discord_webhook==1.0.0
+discord-webhook==0.14
+websockets==12.0
