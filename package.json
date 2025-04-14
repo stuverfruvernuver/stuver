@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "kick-js": "git+https://github.com/retconned/kick-js.git",
+    "kick-js": "github:retconned/kick-js",
     "axios": "^1.6.8",
     "dotenv": "^16.3.1"
   }
