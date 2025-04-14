@@ -13,7 +13,7 @@ from requests.auth import HTTPBasicAuth
 app = Flask(__name__)
 CLIENT_ID = '01JRTHNAP1AE4S75524PEXN0DN'  # Reemplazar con tu client_id
 CLIENT_SECRET = '0061627a12559ca2025a8e2202d9a4cbb89b3fed26c816c9869432a552d44f10'  # Reemplazar con tu client_secret
-REDIRECT_URI = 'http://localhost:5000/callback'  # Reemplazar con tu redirect URI
+REDIRECT_URI = 'https://stuver-safu.onrender.com'  # Reemplazar con tu redirect URI
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # URL del webhook de Discord
 CHANNEL_NAME = "Streameruniversitario"
 start_time = time.time()
