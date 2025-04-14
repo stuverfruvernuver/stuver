@@ -1,4 +1,4 @@
-import { createClient } from "@retconned/kick-js";
+import { createClient } from "kick-js";
 import "dotenv/config";
 import axios from "axios";
 
