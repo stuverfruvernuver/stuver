@@ -30,7 +30,6 @@ def notify_discord(message):
             print("[LOG] Falló el envío a Discord:", response.status_code, response.text)
     except Exception as e:
         print("[LOG] Error al enviar al webhook de Discord:", str(e))
-        from discord_webhook import DiscordWebhook
 
 
 def get_authenticated_username():
