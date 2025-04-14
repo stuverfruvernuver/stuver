@@ -3,3 +3,4 @@ requests==2.31.0
 discord-webhook==0.14
 websockets==12.0
 werkzeug==2.2.3
+gunicorn==20.1.0
