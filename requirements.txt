@@ -1,4 +1,3 @@
-discord-webhook
 websockets==12.0
 requests==2.31.0
-cloudscraper
+discord_webhook==1.0.0
