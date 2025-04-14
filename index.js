@@ -1,14 +1,34 @@
-import { createClient } from "kick-js";
-import "dotenv/config";
-import axios from "axios";
+import { createClient } from "./kick-js/index.js";
+import dotenv from "dotenv";
+import fetch from "node-fetch";
 
-const CHANNEL = "Streameruniversitario";
-const client = createClient(CHANNEL, { logger: true });
+dotenv.config();
 
-let streamLive = false;
-let startTime = null;
+const client = createClient(process.env.KICK_CHANNEL, {
+  logger: true,
+  readOnly: false
+});
 
-client.login({
+const sendDiscordWebhook = async (message) => {
+  try {
+    await fetch(process.env.DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: message,
+        username: "KickBot",
+        avatar_url: "https://preview.redd.it/60ti7xezkdix.jpg"
+      })
+    });
+  } catch (err) {
+    console.error("[LOG] Error enviando al webhook de Discord:", err);
+  }
+};
+
+let online = false;
+let lastCheck = Date.now();
+
+await client.login({
   type: "login",
   credentials: {
     username: process.env.KICK_USERNAME,
@@ -17,36 +37,36 @@ client.login({
   },
 });
 
-function sendDiscordNotification(message) {
-  axios.post(process.env.DISCORD_WEBHOOK_URL, { content: message }).catch(err => {
-    console.error("[LOG] Error al enviar a Discord:", err.response?.data || err.message);
-  });
-}
-
-client.on("ready", () => {
-  console.log(`Bot listo y conectado como ${client.user?.tag}`);
-  sendDiscordNotification(`Bot conectado como **${client.user?.tag}** al canal **${CHANNEL}**.`);
+client.on("ready", async () => {
+  console.log(`[LOG] Bot conectado como ${client.user?.username}`);
+  await sendDiscordWebhook(`Bot conectado como **${client.user?.username}** al canal **${process.env.KICK_CHANNEL}**.`);
+  
+  setInterval(async () => {
+    try {
+      const info = await client.channel();
+      if (info?.livestream) {
+        if (!online) {
+          console.log("[LOG] Stream ha comenzado");
+          await client.sendMessage("Hola!");
+          await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha comenzado.`);
+          online = true;
+        } else {
+          const minutes = Math.floor((Date.now() - lastCheck) / 60000);
+          if (minutes >= 10) {
+            await client.sendMessage(":Bwop:");
+            await sendDiscordWebhook(`El bot sigue activo en el stream (${minutes} minutos en lÃ­nea).`);
+            lastCheck = Date.now();
+          }
+        }
+      } else {
+        if (online) {
+          console.log("[LOG] Stream ha terminado");
+          await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha terminado.`);
+          online = false;
+        }
+      }
+    } catch (err) {
+      console.error("[LOG] Error al revisar el estado del stream:", err);
+    }
+  }, 10 * 1000);
 });
-
-client.on("LiveStreamStart", () => {
-  console.log("[LOG] ¡El stream ha comenzado!");
-  streamLive = true;
-  startTime = Date.now();
-  client.sendMessage("Hola!");
-  sendDiscordNotification("¡El stream ha comenzado!");
-});
-
-client.on("LiveStreamEnd", () => {
-  console.log("[LOG] El stream ha terminado.");
-  streamLive = false;
-  client.sendMessage(":Bwop:");
-  sendDiscordNotification("El stream ha terminado.");
-});
-
-setInterval(() => {
-  if (streamLive && startTime) {
-    const mins = Math.floor((Date.now() - startTime) / 60000);
-    sendDiscordNotification(`El bot sigue en línea después de ${mins} minutos.`);
-    client.sendMessage(":Bwop:");
-  }
-}, 600000);
