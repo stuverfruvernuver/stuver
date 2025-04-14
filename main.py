@@ -1,83 +1,81 @@
+import asyncio
 import os
 import time
-import asyncio
-import websockets
+from flask import Flask
 import requests
 from discord_webhook import DiscordWebhook
-from flask import Flask
-from threading import Thread
-
-KICK_SESSION_TOKEN = os.getenv("KICK_SESSION_TOKEN")
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-CHANNEL_NAME = "streameruniversitario"
-API_BASE = "https://kick.com/api/v2/channels/"
+import websockets
+import json
 
 app = Flask(__name__)
-start_time = None
-is_live = False
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+KICK_SESSION_TOKEN = os.getenv("KICK_SESSION_TOKEN")
+CHANNEL_NAME = "Streameruniversitario"
 
-def send_discord_message(content):
-    webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=content)
-    webhook.execute()
+start_time = time.time()
 
-def get_channel_id(channel_name):
-    res = requests.get(API_BASE + channel_name)
-    if res.status_code == 200:
-        return res.json()["id"]
-    return None
+headers = {
+    "cookie": f"__Secure-next-auth.session-token={KICK_SESSION_TOKEN}",
+    "user-agent": "Mozilla/5.0"
+}
 
-def is_stream_live(channel_name):
-    res = requests.get(API_BASE + channel_name)
-    if res.status_code == 200:
-        return res.json()["livestream"] is not None
-    return False
 
-async def connect_to_chat(channel_id):
-    url = f"wss://chat.kick.com/{channel_id}"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Origin": "https://kick.com",
-        "Cookie": f"__Secure-next-auth.session-token={KICK_SESSION_TOKEN}"
-    }
-    async with websockets.connect(url, extra_headers=headers) as ws:
-        await ws.send('{"event":"join","data":{"room":"channel_{}"}}'.format(channel_id))
-        await ws.send('{"event":"message","data":{"content":":Bwop:"}}')  # Saludo inicial
+def notify_discord(message):
+    try:
+        webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=message)
+        response = webhook.execute()
+        if not response.ok:
+            print("[LOG] Falló el envío a Discord:", response.status_code, response.text)
+    except Exception as e:
+        print("[LOG] Error al enviar al webhook de Discord:", str(e))
 
-        while True:
-            await asyncio.sleep(600)  # Cada 10 minutos
-            await ws.send('{"event":"message","data":{"content":":Bwop:"}}')
 
-def format_uptime(seconds):
-    mins, secs = divmod(int(seconds), 60)
-    hours, mins = divmod(mins, 60)
-    return f"{hours:02d}:{mins:02d}:{secs:02d}"
+def get_authenticated_username():
+    try:
+        response = requests.get("https://kick.com/api/v1/user", headers=headers)
+        if response.ok:
+            data = response.json()
+            return data.get("username")
+        else:
+            print("[LOG] No se pudo obtener el nombre de usuario de Kick")
+            return "Desconocido"
+    except Exception as e:
+        print("[LOG] Error al obtener el usuario Kick:", str(e))
+        return "Desconocido"
 
-def monitor_stream():
-    global start_time, is_live
-    channel_id = get_channel_id(CHANNEL_NAME)
-    if not channel_id:
-        print("Error: No se pudo obtener el ID del canal.")
-        return
 
-    while True:
-        live = is_stream_live(CHANNEL_NAME)
-        if live and not is_live:
-            is_live = True
-            start_time = time.time()
-            send_discord_message("¡El stream ha comenzado!")
-            asyncio.run(connect_to_chat(channel_id))
-        elif not live and is_live:
-            is_live = False
-            send_discord_message("El stream ha terminado.")
-        elif is_live:
-            uptime = time.time() - start_time
-            send_discord_message(f"Stream activo: {format_uptime(uptime)}")
-        time.sleep(600)  # Verifica cada 10 minutos
+async def connect_to_chat():
+    try:
+        url = f"wss://chat.kick.com/socket.io/?channel={CHANNEL_NAME}&EIO=4&transport=websocket"
+        async with websockets.connect(url) as ws:
+            print(f"[LOG] Conectado al chat de {CHANNEL_NAME}")
+            await ws.send("40")  # protocolo de conexión con socket.io
+            await ws.send('42["join", {"channel": "' + CHANNEL_NAME + '"}]')
+
+            await ws.send('42["message", {"content": "Hola!"}]')  # mensaje al empezar stream
+
+            while True:
+                elapsed = int(time.time() - start_time)
+                if elapsed % 600 < 5:  # cada 10 minutos
+                    try:
+                        await ws.send('42["message", {"content": ":Bwop:"}]')
+                        notify_discord(f"El bot sigue en línea después de {elapsed // 60} minutos.")
+                        await asyncio.sleep(5)
+                    except Exception as e:
+                        print("[LOG] No se pudo enviar el mensaje o notificar en Discord:", e)
+                await asyncio.sleep(1)
+    except Exception as e:
+        print("[LOG] Error en la conexión al chat:", e)
+
 
 @app.route('/')
-def home():
-    return "Kick bot está corriendo."
+def index():
+    return "Bot de Kick activo."
+
 
 if __name__ == '__main__':
-    Thread(target=monitor_stream).start()
+    username = get_authenticated_username()
+    notify_discord(f"Bot conectado como **{username}** al canal **{CHANNEL_NAME}**.")
+    loop = asyncio.get_event_loop()
+    loop.create_task(connect_to_chat())
     app.run(host="0.0.0.0", port=10000)
