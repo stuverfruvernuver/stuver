@@ -1,4 +1,4 @@
-import { createClient } from "./kick-js/index.js";
+import { createClient } from "./kick-js/dist/index.js";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 
@@ -28,7 +28,7 @@ const sendDiscordWebhook = async (message) => {
 let online = false;
 let lastCheck = Date.now();
 
-await client.login({
+client.login({
   type: "login",
   credentials: {
     username: process.env.KICK_USERNAME,
@@ -54,7 +54,7 @@ client.on("ready", async () => {
           const minutes = Math.floor((Date.now() - lastCheck) / 60000);
           if (minutes >= 10) {
             await client.sendMessage(":Bwop:");
-            await sendDiscordWebhook(`El bot sigue activo en el stream (${minutes} minutos en lÃ­nea).`);
+            await sendDiscordWebhook(`El bot sigue activo en el stream (${minutes} minutos en línea).`);
             lastCheck = Date.now();
           }
         }
@@ -68,5 +68,5 @@ client.on("ready", async () => {
     } catch (err) {
       console.error("[LOG] Error al revisar el estado del stream:", err);
     }
-  }, 10 * 1000);
+  }, 10 * 1000); // revisar cada 10 segundos
 });
