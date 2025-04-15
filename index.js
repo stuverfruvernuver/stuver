@@ -41,32 +41,36 @@ client.on("ready", async () => {
   console.log(`[LOG] Bot conectado como ${client.user?.username}`);
   await sendDiscordWebhook(`Bot conectado como **${client.user?.username}** al canal **${process.env.KICK_CHANNEL}**.`);
 
-  setInterval(async () => {
-    try {
-      const info = await client.channel();
-      if (info?.livestream) {
-        if (!online) {
-          console.log("[LOG] Stream ha comenzado");
-          await client.sendMessage("Hola!");
-          await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha comenzado.`);
-          online = true;
-        } else {
-          const minutes = Math.floor((Date.now() - lastCheck) / 60000);
-          if (minutes >= 10) {
-            await client.sendMessage(":Bwop:");
-            await sendDiscordWebhook(`El bot sigue activo en el stream (${minutes} minutos en línea).`);
-            lastCheck = Date.now();
-          }
-        }
+let online = false; // Estado inicial, no está en vivo
+
+setInterval(async () => {
+  try {
+    const info = await client.channel();
+    console.log("[LOG] Estado del canal:", info); // Verifica la información que estamos obteniendo
+
+    if (info?.livestream) { // Si el stream está en vivo
+      if (!online) { // Si el bot no está registrado como 'online'
+        console.log("[LOG] El stream ha comenzado");
+        await client.sendMessage("Hola!");
+        await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha comenzado.`);
+        online = true; // Cambiar estado a 'online'
       } else {
-        if (online) {
-          console.log("[LOG] Stream ha terminado");
-          await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha terminado.`);
-          online = false;
+        const minutes = Math.floor((Date.now() - lastCheck) / 60000);
+        if (minutes >= 10) {
+          await client.sendMessage(":Bwop:"); // Enviar un mensaje cada 10 minutos
+          await sendDiscordWebhook(`El bot sigue activo en el stream (${minutes} minutos en línea).`);
+          lastCheck = Date.now();
         }
       }
-    } catch (err) {
-      console.error("[LOG] Error al revisar el estado del stream:", err);
+    } else { // Si el stream no está en vivo
+      if (online) { // Si el bot estaba marcado como 'online'
+        console.log("[LOG] El stream ha terminado");
+        await sendDiscordWebhook(`El stream de ${process.env.KICK_CHANNEL} ha terminado.`);
+        online = false; // Cambiar estado a 'offline'
+      }
     }
-  }, 10 * 1000); // revisar cada 10 segundos
+  } catch (err) {
+    console.error("[LOG] Error al revisar el estado del stream:", err);
+  }
+}, 30 * 1000); // Revisar cada 30 segundos en lugar de cada 10 segundos
 });
