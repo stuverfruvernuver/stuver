@@ -1,4 +1,4 @@
-import { createClient } from "./kick-js/index.js"; // Asegúrate que esta ruta apunte al archivo correcto
+import { createClient } from "./kick-js/dist/index.js"; // Asegúrate que esta ruta apunte al archivo correcto
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 
