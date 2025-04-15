@@ -1,12 +1,12 @@
-import { createClient } from "./kick-js/dist/index.js";
-import fetch from "node-fetch";
+import { createClient } from "./kick-js/index.js"; // Asegúrate que esta ruta apunte al archivo correcto
 import dotenv from "dotenv";
+import fetch from "node-fetch";
 
 dotenv.config();
 
 const client = createClient(process.env.KICK_CHANNEL, {
   logger: true,
-  readOnly: false
+  readOnly: false,
 });
 
 const sendDiscordWebhook = async (message) => {
@@ -17,8 +17,8 @@ const sendDiscordWebhook = async (message) => {
       body: JSON.stringify({
         content: message,
         username: "KickBot",
-        avatar_url: "https://preview.redd.it/60ti7xezkdix.jpg"
-      })
+        avatar_url: "https://preview.redd.it/60ti7xezkdix.jpg",
+      }),
     });
   } catch (err) {
     console.error("[LOG] Error enviando al webhook de Discord:", err);
@@ -40,7 +40,7 @@ client.login({
 client.on("ready", async () => {
   console.log(`[LOG] Bot conectado como ${client.user?.username}`);
   await sendDiscordWebhook(`Bot conectado como **${client.user?.username}** al canal **${process.env.KICK_CHANNEL}**.`);
-  
+
   setInterval(async () => {
     try {
       const info = await client.channel();
