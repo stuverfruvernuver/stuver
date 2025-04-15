@@ -1,6 +1,6 @@
 import { createClient } from "./kick-js/dist/index.js";
-import dotenv from "dotenv";
 import fetch from "node-fetch";
+import dotenv from "dotenv";
 
 dotenv.config();
 
