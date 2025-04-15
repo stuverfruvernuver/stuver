@@ -72,5 +72,5 @@ setInterval(async () => {
   } catch (err) {
     console.error("[LOG] Error al revisar el estado del stream:", err);
   }
-}, 30 * 1000); // Revisar cada 30 segundos en lugar de cada 10 segundos
+}, 60 * 1000); // Revisar cada 30 segundos en lugar de cada 10 segundos
 });
